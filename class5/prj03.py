@@ -2,7 +2,7 @@
 import requests
 
 #######################定義常數########################
-API_KEY = "892da2f13edf3c7f382637760e72d224"
+API_KEY = "0c06092fb6be7fd6bbe6ea457e7427fb"
 BASE_URL = "https://api.openweathermap.org/data/2.5/weather?"
 UNTTS = "metric"
 LANG = "zh_tw"
