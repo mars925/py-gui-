@@ -16,6 +16,7 @@ class WeatherAPI:
         self.units = "metric"  # 這一版固定用攝氏資料查詢
         self.lang = lang  # lang 代表回傳的語言，這裡使用繁體中文
         self.base_url = "http://api.openweathermap.org/data/2.5/weather?"  # 目前天氣 API 的網址前半段
+        self.forecast_url = "http://api.openweathermap.org/data/2.5/forecast?"  # 天氣預報 API 的網址前半段
         self.icon_base_url = "https://openweathermap.org/img/wn/"  # 天氣圖示網址的前半段
 
     def get_current_weather(self, city_name):
@@ -50,4 +51,28 @@ class WeatherAPI:
         if response.status_code == 200:
             return response.content  # 回傳圖片的二進位資料
         return None  # 如果下載失敗，就回傳 None
-    
+    def get_forecast(self, city_name):
+        # get_forecast() 只負責「拿到天氣預報的原始資料」。
+        send_url =f"{self.forecast_url}appid={self.api_key}&q={city_name}&units={self.units}&lang={self.lang}"
+        response = requests.get(send_url)
+        response.raise_for_status()
+        return response.json()
+    def get_forecast_summary(self, city_name,count=10):
+        forecast_count=max(0,count)  # 確保 count 不會是負數
+        try:
+            info = self.get_forecast(city_name)
+        except requests.HTTPError as error:
+            requests=error.response
+            if requests is not None and requests.status_code == 404:
+                return None  # 如果城市名稱錯誤導致 404，就回傳 None
+            city_label=info["city"].get("name",city_name)
+            forecast_summary=[]
+            for forecast in info["list"][:forecast_count]:
+                forecast_summary.append({
+                    "city_name": city_label,
+                    "datetime": forecast["dt_txt"],
+                    "temperature_celsius": round(forecast["main"]["temp"], 2),
+                    "description": forecast["weather"][0]["description"],
+                    "icon_code": forecast["weather"][0]["icon"]
+                })
+            return forecast_summary
