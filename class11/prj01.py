@@ -10,7 +10,7 @@ from mars.mars import (
     WeatherAPI,
 )  # 從我們自己寫的 mars.py 裡匯入 WeatherAPI 類別，讓我們可以用它來查天氣
 from dotenv import load_dotenv  #
-
+import openai  # C；這個套件負責和 OpenAI 的 API 溝通
 #######################初始化#######################
 load_dotenv()  # 讀取 .env 檔，讓程式可以拿到 DC_BOT_TOKEN 這類設定資料
 
@@ -35,7 +35,7 @@ tree = discord.app_commands.CommandTree(
 weather_api = WeatherAPI(
     os.getenv("OPENWEATHER_API_KEY")
 )  # 建立一個 WeatherAPI 的實例，準備好查天氣用的設定；把 .env 裡的 OPENWEATHER_API_KEY 讀進來當作 API 金鑰
-
+openai.api_key = os.getenv("OPENAI_API_KEY")  # 把 .env 裡的 OPENAI_API_KEY 讀進來當作 API 金鑰，準備好跟 OpenAI 聊天用的設定
 
 def build_embed(weather_summary):
     """把從 WeatherAPI 拿到的天氣資訊整理成 Discord 的 embed 格式。"""
@@ -60,7 +60,7 @@ def build_forecast_embed(forecast_summary):
 
     for forecast in forecast_summary:
         embed = discord.Embed(
-            title=f"{forecast['city_name']} 的天氣預報" - {forecast["datetime"]},
+            title=f"{forecast['city_name']} 的天氣預報 - {forecast['datetime']}",
             description=f"敘述：{forecast['description']}",
             color=discord.Color.from_str("#1B14E2"),  # Dodger Blue 的顏色代碼
         )
@@ -119,7 +119,7 @@ async def hello(interaction: discord.Interaction):
 
 
 @tree.command(name="weather", description="取得當前天氣資訊")
-async def weather(interaction: discord.Interaction, city: str, forecast: bool = False):
+async def weather(interaction: discord.Interaction, city: str, forecast: bool = False,ai: bool = False):
     """輸入 /weather [城市名稱]，機器人會回傳該城市的天氣資訊。"""
     await interaction.response.defer()  # 先回應「正在處理中...」，讓使用者知道指令有被收到，正在查資料
     city_name = city.strip()  # 去掉使用者輸入的城市名稱前後的空白
@@ -135,16 +135,48 @@ async def weather(interaction: discord.Interaction, city: str, forecast: bool = 
                     f"無法獲取 {city_name} 的天氣資訊，請確認城市名稱是否正確。"
                 )
                 return
+        if not ai:
+            forecast_summary = weather_api.get_forecast_summary(city)
+            if forecast_summary is None:
+                await interaction.followup.send(
+                    f"無法獲取 {city_name} 的天氣預報資訊，請確認城市名稱是否正確。"
+                )
+                return  
                     
-            embed = build_embed(weather_summary)  # 把天氣資訊整理成 Discord embed 格式
-            await interaction.followup.send(embed=embed)  # 把 embed 回傳給使用
+            embeds = build_forecast_embed(forecast_summary)
+            await interaction.followup.send(embeds=embeds)  # 把 embed 回傳給使用者
             return
-
-    except (requests.RequestException, ValueError):
+        row_forecast=weather_api.get_forecast(city)
+    
+    except (requests.RequestException, ValueError)as e:
         await interaction.followup.send(f"查詢天氣資訊時發生錯誤：{e}")
         return
-
-
+    
+    if "list" not in row_forecast:
+        await interaction.followup.send(
+            f"無法獲取 {city_name} 的天氣預報資訊，請確認城市名稱是否正確。"
+        )
+        return
+    
+    try:
+        response = openai.chat.completions.create(
+        model="gpt-4o",
+        messages=[
+            {
+                "role":"system",
+                "content":"你是一個專業的氣象預報員，請根據以下的天氣預報資料，提供一個簡短的天氣摘要，包含未來幾天的主要天氣狀況、溫度趨勢，以及任何需要注意的天氣事件。請用繁體中文回答。",
+            },
+            { 
+                "role":"user",
+                "content":f"這是 {city_name} 的天氣預報資料：{row_forecast}",
+            },
+        ],
+        temperature=0.2,
+    )
+        analysis=response.choices[0].message.content
+        await interaction.followup.send(f"{city_name} 的天氣預報分析：{analysis}")
+    except openai.OpenAIError as e:
+        await interaction.followup.send(f"分析天氣預報時發生錯誤：{e}")
 #######################啟動#######################
 # def main() 把「啟動機器人」這件事單獨包成一個步驟。
 # 這樣主程式看起來更整齊，以後如果啟動前還要加其他設定，也知道要放在哪裡。

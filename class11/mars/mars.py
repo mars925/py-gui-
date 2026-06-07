@@ -62,17 +62,19 @@ class WeatherAPI:
         try:
             info = self.get_forecast(city_name)
         except requests.HTTPError as error:
-            requests=error.response
-            if requests is not None and requests.status_code == 404:
+            if error.response.status_code == 404:
                 return None  # 如果城市名稱錯誤導致 404，就回傳 None
-            city_label=info["city"].get("name",city_name)
-            forecast_summary=[]
-            for forecast in info["list"][:forecast_count]:
-                forecast_summary.append({
-                    "city_name": city_label,
-                    "datetime": forecast["dt_txt"],
-                    "temperature_celsius": round(forecast["main"]["temp"], 2),
-                    "description": forecast["weather"][0]["description"],
-                    "icon_code": forecast["weather"][0]["icon"]
-                })
-            return forecast_summary
+            else:
+                raise  # 如果是其他 HTTP 錯誤，重新丟出例外讓上層處理
+        
+        city_label=info["city"].get("name",city_name)
+        forecast_summary=[]
+        for forecast in info["list"][:forecast_count]:
+            forecast_summary.append({
+                "city_name": city_label,
+                "datetime": forecast["dt_txt"],
+                "temperature_celsius": round(forecast["main"]["temp"], 2),
+                "description": forecast["weather"][0]["description"],
+                "icon_code": forecast["weather"][0]["icon"]
+            })
+        return forecast_summary
