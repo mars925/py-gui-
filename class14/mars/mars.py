@@ -85,15 +85,22 @@ class AIAssistant:
     def __init__(self, api_key):
         self.api_key = api_key  # api_key 是 ChatGPT 辨認身分用的金鑰
         openai.api_key = api_key  # 把金鑰設定給 openai 模組，這樣後續就不用每次都手動帶入金鑰了
-    def ask(self,system_prompt,user_message,temperature=0.2,model="gpt-4o"):
+    def ask(self,system_prompt,user_message,history_messages=None,temperature=0.2,model="gpt-4o"):
         # ask() 只負責「向 ChatGPT 拿原始資料」。
         # 這一步對應到第一次實作時，先組對話內容、再 openai.ChatCompletion.create() 拿資料的部分。
         if not self.api_key:
             return None ,"ChatGPT API 金鑰未設定，無法進行對話。"
+        if history_messages is None:
+            history_messages = []
         messages=(
             [{"role": "system", "content": system_prompt},]
+            + history_messages
             +[{"role": "user", "content": user_message}]
         )
+        print("===傳給OpenAI的對話內容===")
+        for msg in messages:
+            print(f"{msg['role']}: {msg['content']}")
+        print("==========================")
 
         try:
             response = openai.chat.completions.create(
